@@ -144,7 +144,7 @@ Object.assign(t,{t:$("#f_t").value.trim(),d:$("#f_d").value,dep:$("#f_dep").valu
 if(t.s==="done")t.pg=100;if(!editId)t.id=0;save(t);$("#dlg").close()};
 $("#del").onclick=()=>{const b=$("#del");if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Bấm lần nữa để xóa";return}GAS.run.withSuccessHandler(boot).withFailureHandler(e=>alert(e.message||e)).deleteTask(editId);$("#dlg").close()};
 // ===== Kết nối API + đăng nhập Google (thay cho google.script.run) =====
-const CFG={API:"DÁN_URL_WEB_APP_VÀO_ĐÂY",CLIENT_ID:"DÁN_CLIENT_ID_VÀO_ĐÂY"};
+const CFG={API:"https://script.google.com/macros/s/AKfycbx33B127_BUJ3NCAl0mMSy4mAi-_Qki5YTLQ24QIiAx_pogoUzVZDXq0XAGsPLUXBxHmA/exec",CLIENT_ID:"564117159600-t3lfq6g0705i60eoi9itg9s1n8fhvd40.apps.googleusercontent.com"};
 let TOKEN=sessionStorage.getItem("tk")||"",loginRes=null;
 function api(fn,args,retry){document.body.classList.add("busy");
 return fetch(CFG.API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.json()).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).finally(()=>document.body.classList.remove("busy"))}
