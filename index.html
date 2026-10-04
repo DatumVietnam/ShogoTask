@@ -211,12 +211,16 @@ document.title=(ap+lt?"("+(ap+lt)+") ":"")+"Shogo Task"}
 addEventListener("offline",()=>toast("Mất kết nối mạng. Dữ liệu sẽ không cập nhật cho đến khi có mạng lại."));
 addEventListener("online",()=>toast("Đã kết nối lại."));
 
+// ===== Hiện lỗi thay vì đứng im =====
+function showErr(m){if(S!==null)return;$("#app").innerHTML='<div class="panel late"><b>Không tải được dữ liệu</b><br>'+esc(m)+'<br><button class="btn" id="rt" style="margin-top:10px">Tải lại</button></div>';$("#rt").onclick=()=>location.reload()}
+addEventListener("error",e=>showErr(e.message));addEventListener("unhandledrejection",e=>showErr((e.reason&&e.reason.message)||e.reason));
 // ===== Kết nối API + đăng nhập Google (thay cho google.script.run) =====
 let TOKEN=sessionStorage.getItem("tk")||"",loginRes=null;
 const tokExp=()=>{try{return JSON.parse(atob(TOKEN.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).exp}catch(e){return 1e12}};
 function api(fn,args,retry){if(TOKEN&&tokExp()<Date.now()/1e3+30)return login().then(()=>api(fn,args,retry));document.body.classList.add("busy");
-return fetch(CFG.API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.json()).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).finally(()=>document.body.classList.remove("busy"))}
-function mk(ok,ko){return new Proxy({},{get:(_,k)=>k==="withSuccessHandler"?f=>mk(f,ko):k==="withFailureHandler"?f=>mk(ok,f):(...a)=>{api(k,a).then(ok,ko)}})}
+const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),45000);
+return fetch(CFG.API,{signal:ac.signal,method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.json()).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).catch(e=>{throw e.name==="AbortError"?new Error("Máy chủ phản hồi quá lâu. Hãy bấm Tải lại."):e}).finally(()=>{clearTimeout(tm);document.body.classList.remove("busy")})}
+function mk(ok,ko){return new Proxy({},{get:(_,k)=>k==="withSuccessHandler"?f=>mk(f,ko):k==="withFailureHandler"?f=>mk(ok,f):(...a)=>{api(k,a).then(v=>{try{ok(v)}catch(e){ko(e)}},ko)}})}
 const GAS={get run(){return mk(()=>{},e=>toast(e.message||e))}};
 let loginP=null;function login(){if(loginP)return loginP;TOKEN="";sessionStorage.removeItem("tk");$("#lg").style.display="flex";if(window.google&&google.accounts)try{google.accounts.id.prompt()}catch(e){}return loginP=new Promise(r=>loginRes=()=>{loginP=null;r()})}
 function gisInit(){google.accounts.id.initialize({client_id:CFG.CLIENT_ID,auto_select:true,callback:x=>{TOKEN=x.credential;sessionStorage.setItem("tk",TOKEN);$("#lg").style.display="none";if(loginRes){const r=loginRes;loginRes=null;r()}else boot()}});google.accounts.id.renderButton($("#gbtn"),{theme:"outline",size:"large"})}
@@ -224,6 +228,7 @@ $("#out").onclick=()=>{sessionStorage.removeItem("tk");if(window.google&&google.
 let lastRf=Date.now();const rf=()=>{if(TOKEN&&!document.hidden&&V!=="users"&&!$("#dlg").open&&!$("#csvd").open&&Date.now()-lastRf>9e4){lastRf=Date.now();boot()}};
 setInterval(rf,180000);document.addEventListener("visibilitychange",rf);
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
-if(window.gisReady)gisInit();
-if(TOKEN)boot();else login();
+if(typeof CFG==="undefined")showErr("Không tìm thấy file config.js. Hãy tải config.js lên GitHub, cùng thư mục với index.html.");
+else if(/DÁN_/.test(CFG.API+CFG.CLIENT_ID))showErr("File config.js chưa điền đủ API hoặc CLIENT_ID.");
+else{if(window.gisReady)gisInit();if(TOKEN)boot();else login()}
 </script></body></html>
