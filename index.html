@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi"><head><meta charset="utf-8">
+<html lang="vi"><head><meta charset="utf-8"><link rel="preconnect" href="https://script.google.com"><link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <script src="config.js"></script><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet"><link rel="icon" href="icon-192.png"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#063c90"><link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Shogo Task – Quản lý công việc</title>
@@ -134,7 +134,10 @@ let PPL=[],ME={role:"staff"};
 const day=n=>{const d=new Date(Date.now()+n*864e5);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 let QF="",SHEET="",SUB=[],S=null,V="board",editId=null;
 const $=s=>document.querySelector(s);
-function boot(){GAS.run.withSuccessHandler(d=>{S=d.tasks;ME=d.me;PPL=d.people;SHEET=d.url;const v=$("#fa").value,nm=PPL.map(p=>p[0]);fill($("#fa"),nm,"Tất cả nhân sự");$("#fa").value=v;fill($("#f_a"),nm);$("#who").textContent=ME.name+" · "+ME.role;$("#add").style.display=ME.role==="staff"?"none":"";$("#nu").style.display=["owner","admin"].includes(ME.role)?"":"none";render();hello()}).withFailureHandler(e=>{$("#app").innerHTML='<div class="panel late">'+esc(e.message||e)+'</div>'}).bootstrap()}
+const CK=()=>{try{return"bc:"+JSON.parse(atob(TOKEN.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).email}catch(e){return""}};
+const applyBoot=d=>{S=d.tasks;ME=d.me;PPL=d.people;SHEET=d.url;const v=$("#fa").value,nm=PPL.map(p=>p[0]);fill($("#fa"),nm,"Tất cả nhân sự");$("#fa").value=v;fill($("#f_a"),nm);$("#who").textContent=ME.name+" · "+ME.role;$("#add").style.display=ME.role==="staff"?"none":"";$("#nu").style.display=["owner","admin"].includes(ME.role)?"":"none";render();hello()};
+function loadCache(){try{const k=CK();if(!k||S)return;const c=JSON.parse(localStorage.getItem(k)||"null");if(c&&Date.now()-c.t<2592e5)applyBoot(c.d)}catch(e){}}
+function boot(){GAS.run.withSuccessHandler(d=>{try{const k=CK();k&&localStorage.setItem(k,JSON.stringify({t:Date.now(),d}))}catch(e){}applyBoot(d)}).withFailureHandler(e=>{if(S)toast(e.message||e);else $("#app").innerHTML='<div class="panel late">'+esc(e.message||e)+'</div>'}).bootstrap()}
 const BUSY=new Set();let NB=0;
 const upsert=t=>{if(!t)return;const i=S.findIndex(x=>x.id==t.id);if(i<0)S.push(t);else S[i]=t};
 function save(t,snap){const k="s"+t.id;if(BUSY.has(k))return;BUSY.add(k);
@@ -233,19 +236,19 @@ addEventListener("error",e=>showErr(e.message));addEventListener("unhandledrejec
 // ===== Kết nối API + đăng nhập Google (thay cho google.script.run) =====
 let TOKEN=sessionStorage.getItem("tk")||"",loginRes=null;
 const tokExp=()=>{try{return JSON.parse(atob(TOKEN.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).exp}catch(e){return 1e12}};
-function api(fn,args,retry){if(TOKEN&&tokExp()<Date.now()/1e3+30)return login().then(()=>api(fn,args,retry));NB++;document.body.classList.add("busy");
-const st=$("#st");if(st){st.textContent="Đang gọi máy chủ…";setTimeout(()=>{const s=$("#st");if(s)s.textContent="Máy chủ phản hồi chậm (lần đầu có thể mất 10–20 giây). Vui lòng chờ…"},8000)}
-const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),45000);
-return fetch(CFG.API,{signal:ac.signal,method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.text()).then(t=>{try{return JSON.parse(t)}catch(e){throw new Error("Máy chủ trả về trang không phải dữ liệu (thường do chưa cấp quyền hoặc chưa triển khai phiên bản mới của Code.gs).")}}).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).catch(e=>{throw e.name==="AbortError"?new Error("Máy chủ phản hồi quá lâu. Hãy bấm Tải lại."):e}).finally(()=>{clearTimeout(tm);if(--NB<=0){NB=0;document.body.classList.remove("busy")}})}
+function api(fn,args,retry,again){if(TOKEN&&tokExp()<Date.now()/1e3+30)return login().then(()=>api(fn,args,retry));NB++;document.body.classList.add("busy");
+const st=$("#st");if(st){st.textContent="Đang gọi máy chủ…";setTimeout(()=>{const s=$("#st");if(s)s.textContent="Máy chủ Google đang khởi động (có thể mất 10–20 giây khi lâu không dùng). Vui lòng chờ…"},4000)}
+const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),30000);
+return fetch(CFG.API,{signal:ac.signal,method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.text()).then(t=>{try{return JSON.parse(t)}catch(e){throw new Error("Máy chủ trả về trang không phải dữ liệu (thường do chưa cấp quyền hoặc chưa triển khai phiên bản mới của Code.gs).")}}).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).catch(e=>{if(!again&&fn==="bootstrap"&&(e.name==="AbortError"||e instanceof TypeError))return api(fn,args,retry,1);throw e.name==="AbortError"?new Error("Máy chủ phản hồi quá lâu. Hãy bấm Tải lại."):e}).finally(()=>{clearTimeout(tm);if(--NB<=0){NB=0;document.body.classList.remove("busy")}})}
 function mk(ok,ko){return new Proxy({},{get:(_,k)=>k==="withSuccessHandler"?f=>mk(f,ko):k==="withFailureHandler"?f=>mk(ok,f):(...a)=>{api(k,a).then(v=>{try{ok(v)}catch(e){ko(e)}},ko)}})}
 const GAS={get run(){return mk(()=>{},e=>toast(e.message||e))}};
 let loginP=null;function login(){if(loginP)return loginP;TOKEN="";sessionStorage.removeItem("tk");$("#lg").style.display="flex";$("#lg .m").textContent="Phiên đăng nhập đã hết hạn hoặc chưa đăng nhập. Vui lòng đăng nhập bằng Gmail được cấp quyền.";if(window.google&&google.accounts)try{google.accounts.id.prompt()}catch(e){}return loginP=new Promise(r=>loginRes=()=>{loginP=null;r()})}
 function gisInit(){google.accounts.id.initialize({client_id:CFG.CLIENT_ID,auto_select:true,callback:x=>{TOKEN=x.credential;sessionStorage.setItem("tk",TOKEN);$("#lg").style.display="none";if(loginRes){const r=loginRes;loginRes=null;r()}else boot()}});google.accounts.id.renderButton($("#gbtn"),{theme:"outline",size:"large"})}
-$("#out").onclick=()=>{sessionStorage.removeItem("tk");if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();location.reload()};
+$("#out").onclick=()=>{try{localStorage.removeItem(CK())}catch(e){}sessionStorage.removeItem("tk");if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();location.reload()};
 let lastRf=Date.now();const rf=()=>{if(TOKEN&&!document.hidden&&V!=="users"&&!$("#dlg").open&&!$("#csvd").open&&Date.now()-lastRf>9e4){lastRf=Date.now();boot()}};
 setInterval(rf,180000);document.addEventListener("visibilitychange",rf);
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 if(typeof CFG==="undefined")showErr("Không tìm thấy file config.js. Hãy tải config.js lên GitHub, cùng thư mục với index.html.");
 else if(/DÁN_/.test(CFG.API+CFG.CLIENT_ID))showErr("File config.js chưa điền đủ API hoặc CLIENT_ID.");
-else{if(window.gisReady)gisInit();if(TOKEN)boot();else login()}
+else{if(window.gisReady)gisInit();if(TOKEN){loadCache();boot()}else login().then(()=>{loadCache();boot()})}
 </script></body></html>
