@@ -90,6 +90,17 @@ header .btn{background:var(--card);color:var(--tx);border-color:var(--bd)}header
 .late{color:var(--red)}.t.high{border-left-color:var(--red)}
 #lg{background:var(--card)!important}#lg .m{color:var(--mu)}
 @media(max-width:700px){.plate img{height:26px}}
+
+/* v4: responsive Desktop/Tablet/Mobile, không tràn ngang */
+:root{--px:max(14px,calc((100% - 1440px)/2),env(safe-area-inset-left,0px))}
+html,body{max-width:100%;overflow-x:clip}
+.board>*,.grid>*,.tb>*{min-width:0}
+.pend{opacity:.5;pointer-events:none}
+dialog{width:min(560px,94vw)}
+#hi b{font-size:20px}
+@media(min-width:1101px){.col{max-height:calc(100dvh - 290px);min-height:240px;overflow-y:auto;padding-right:4px;scrollbar-width:thin}}
+@media(max-width:900px){header nav{order:5;flex:1 0 100%}}
+@media(max-width:700px){dialog{width:100vw}}
 </style><script src="https://accounts.google.com/gsi/client" async defer onload="window.gisReady=1;window.gisInit&&gisInit()"></script></head><body>
 <div id="lg" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99;align-items:center;justify-content:center;flex-direction:column;gap:14px"><span class="plate" style="padding:10px 18px"><img src="logo.png" alt="SHOGO" style="height:60px;display:block"></span><div class="m">Đăng nhập bằng Gmail đã được quản trị cấp quyền</div><div id="gbtn"></div></div>
 <header><h1><span class="plate"><img src="logo.png" alt="SHOGO"></span><i>Task</i></h1>
@@ -98,7 +109,7 @@ header .btn{background:var(--card);color:var(--tx);border-color:var(--bd)}header
 <div id="hi"></div>
 <div id="tb" class="tb"><input id="q" placeholder="Tìm kiếm..."><select id="fd"></select><select id="fa"></select><select id="so"><option value="due">Xếp: Hạn gần</option><option value="pri">Xếp: Ưu tiên</option><option value="upd">Xếp: Mới cập nhật</option></select></div>
 <div id="chips" class="chips"></div>
-<main id="app"><div class="board"><div class="col"><div class="sk"></div><div class="sk"></div></div><div class="col"><div class="sk"></div><div class="sk"></div></div><div class="col"><div class="sk"></div><div class="sk"></div></div><div class="col"><div class="sk"></div><div class="sk"></div></div></div></main>
+<main id="app"><div class="board"><div class="col"><div class="sk"></div><div class="sk"></div></div><div class="col"><div class="sk"></div><div class="sk"></div></div><div class="col"><div class="sk"></div><div class="sk"></div></div><div class="col"><div class="sk"></div><div class="sk"></div></div></div><div id="st" class="m" style="text-align:center;padding:14px">Đang kết nối máy chủ…</div></main>
 <div id="toast" role="status" aria-live="polite"></div>
 <dialog id="dlg"><h3 id="dt" style="margin:0 0 4px">Công việc</h3>
 <label>Tiêu đề<input id="f_t"></label>
@@ -124,7 +135,12 @@ const day=n=>{const d=new Date(Date.now()+n*864e5);return d.getFullYear()+"-"+St
 let QF="",SHEET="",SUB=[],S=null,V="board",editId=null;
 const $=s=>document.querySelector(s);
 function boot(){GAS.run.withSuccessHandler(d=>{S=d.tasks;ME=d.me;PPL=d.people;SHEET=d.url;const v=$("#fa").value,nm=PPL.map(p=>p[0]);fill($("#fa"),nm,"Tất cả nhân sự");$("#fa").value=v;fill($("#f_a"),nm);$("#who").textContent=ME.name+" · "+ME.role;$("#add").style.display=ME.role==="staff"?"none":"";$("#nu").style.display=["owner","admin"].includes(ME.role)?"":"none";render();hello()}).withFailureHandler(e=>{$("#app").innerHTML='<div class="panel late">'+esc(e.message||e)+'</div>'}).bootstrap()}
-function save(t){GAS.run.withSuccessHandler(boot).withFailureHandler(e=>{toast(e.message||e);boot()}).saveTask(t)}
+const BUSY=new Set();let NB=0;
+const upsert=t=>{if(!t)return;const i=S.findIndex(x=>x.id==t.id);if(i<0)S.push(t);else S[i]=t};
+function save(t,snap){const k="s"+t.id;if(BUSY.has(k))return;BUSY.add(k);
+GAS.run.withSuccessHandler(r=>{BUSY.delete(k);r?upsert(r):boot();render();hello()}).withFailureHandler(e=>{BUSY.delete(k);toast(e.message||e);if(snap)upsert(snap);render();boot()}).saveTask(t)}
+function act(t,fn,...a){const k="a"+t.id;if(BUSY.has(k))return;BUSY.add(k);document.querySelectorAll('[data-id="'+t.id+'"]').forEach(e=>e.classList.add("pend"));
+GAS.run.withSuccessHandler(r=>{BUSY.delete(k);upsert(r);if($("#dlg").open)$("#dlg").close();render();hello()}).withFailureHandler(e=>{BUSY.delete(k);toast(e.message||e);render()})[fn](t.id,...a)}
 const late=t=>t.s!=="done"&&t.due&&t.due<day(0);
 const fill=(el,arr,all)=>el.innerHTML=(all?`<option value="">${all}</option>`:"")+arr.map(x=>`<option>${esc(x)}</option>`).join("");
 const J=s=>{try{return JSON.parse(s||"[]")}catch(e){return[]}};
@@ -139,7 +155,7 @@ document.querySelectorAll("#chips button").forEach(b=>b.onclick=()=>{QF=b.datase
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const NX=t=>t.s==="todo"||(t.s==="doing"&&t.a===ME.name)||(t.s==="review"&&canAp(t));
 const card=t=>`<div class="t ${t.p}" draggable="true" data-id="${t.id}">${NX(t)?`<button class="btn adv" data-id="${t.id}" title="${t.s==="review"?"Duyệt hoàn thành":t.s==="doing"?"Gửi người giao duyệt":"Bắt đầu làm"}" style="padding:0 8px;float:right">›</button>`:""}<b>${esc(t.t)}</b><span class="tag">${esc(t.dep)}</span><span class="tag">${PR[t.p]}</span><div class="m">${ic.u}${esc(t.a)} · <span class="${late(t)?"late":""}">${ic.c}${esc(t.due)||"—"}${late(t)?" (trễ hạn)":""}</span> <span>${J(t.sub).length?"☑ "+J(t.sub).filter(s=>s.d).length+"/"+J(t.sub).length:""} ${J(t.cmt).length?ic.m+J(t.cmt).length:""}</span></div>${t.s==="review"?`<div class="m" style="color:var(--wa);font-weight:600">${canAp(t)?"👉 Cần bạn duyệt":"⏳ Chờ "+esc(t.byName||t.by)+" duyệt"}</div>`:""}<div class="bar"><i style="width:${t.pg}%"></i></div></div>`;
-function render(){chips();$("#chips").style.display=$("#tb").style.display=V==="users"?"none":"flex";const L=filt(),A=$("#app");if(V==="users"){usersV();return}
+function render(){if(!S)return;chips();$("#chips").style.display=$("#tb").style.display=V==="users"?"none":"flex";const L=filt(),A=$("#app");if(V==="users"){usersV();return}
 if(V==="board"){A.innerHTML=`<div class="board">${ST.map(([k,n])=>{const x=L.filter(t=>t.s===k);return`<div class="col" data-s="${k}"><h3>${n}<span class="m">${x.length}</span></h3>${x.map(card).join("")||'<div class="e">Chưa có việc</div>'}</div>`}).join("")}</div>`;bindDnD()}
 else if(V==="list"){A.innerHTML=`<div class="tw"><table><tr><th>Công việc</th><th>Phòng ban</th><th>Người làm</th><th>Ưu tiên</th><th>Hạn</th><th>Tiến độ</th><th>Trạng thái</th></tr>${L.map(t=>`<tr class="row" data-id="${t.id}" style="cursor:pointer"><td>${esc(t.t)}</td><td>${esc(t.dep)}</td><td>${esc(t.a)}</td><td>${PR[t.p]}</td><td class="${late(t)?"late":""}">${esc(t.due)||"—"}</td><td>${t.pg}%</td><td>${ST.find(s=>s[0]===t.s)[1]}</td></tr>`).join("")}</table></div>`}
 else{const done=L.filter(t=>t.s==="done").length,lt=L.filter(late),avg=L.length?Math.round(L.reduce((a,t)=>a+t.pg,0)/L.length):0;
@@ -150,23 +166,23 @@ A.innerHTML=`<div class="grid"><div class="k">Tổng công việc<big>${L.length
 <div class="panel"><b>Việc trễ hạn</b>${lt.length?lt.map(t=>`<div class="row" data-id="${t.id}" style="cursor:pointer;padding:5px 0">⚠ ${esc(t.t)} <span class="m">– ${esc(t.a)}, hạn ${esc(t.due)}</span></div>`).join(""):'<div class="m">Không có 🎉</div>'}</div>
 <button class="btn" id="exp">Xuất bảng (dán vào Excel/Sheets)</button> ${["admin","owner"].includes(ME.role)?`<button class="btn" id="rep">Báo cáo tuần (gửi vào email của tôi)</button>`:""} ${SHEET?`<a class="btn" target="_blank" href="${SHEET}" style="text-decoration:none">Mở Google Sheet</a>`:""} ${["admin","owner"].includes(ME.role)&&!S.length?`<button class="btn pr" id="seed">Nạp dữ liệu mẫu</button>`:""}`;
 const e=$("#exp");if(e)e.onclick=exportCSV;const rp=$("#rep");if(rp)rp.onclick=()=>{rp.disabled=true;GAS.run.withSuccessHandler(()=>{rp.disabled=false;toast("Đã gửi báo cáo vào email của bạn.")}).withFailureHandler(x=>{rp.disabled=false;toast(x.message||x)}).sendReportNow()};const sd=$("#seed");if(sd)sd.onclick=()=>GAS.run.withSuccessHandler(boot).withFailureHandler(x=>toast(x.message||x)).seedDemo()}
-document.querySelectorAll(".t,.row").forEach(el=>el.onclick=()=>openD(+el.dataset.id));document.querySelectorAll(".adv").forEach(b=>b.onclick=e=>{e.stopPropagation();const t=S.find(x=>x.id==b.dataset.id),i=ST.findIndex(z=>z[0]===t.s);if(i<3)moveTo(t,ST[i+1][0])})}
+document.querySelectorAll(".t,.row").forEach(el=>{el.tabIndex=0;el.onclick=()=>openD(+el.dataset.id);el.onkeydown=e=>{if(e.key==="Enter"&&e.target===el)openD(+el.dataset.id)}});document.querySelectorAll(".adv").forEach(b=>b.onclick=e=>{e.stopPropagation();const t=S.find(x=>x.id==b.dataset.id),i=ST.findIndex(z=>z[0]===t.s);if(i<3)moveTo(t,ST[i+1][0])})}
 function moveTo(t,ns){if(ns===t.s)return;const ap=canAp(t),nmz=t.byName||t.by;
 if(ns==="done"&&!ap)return toast("Chỉ người giao việc ("+nmz+") mới được duyệt hoàn thành.");
 if(t.s==="done"&&!ap)return toast("Việc đã hoàn thành, chỉ người giao ("+nmz+") mới được mở lại.");
 const rr=()=>GAS.run.withSuccessHandler(boot).withFailureHandler(e=>{toast(e.message||e);boot()});
-if(ns==="done")return rr().approveTask(t.id,true,"");
-if(ns==="review"&&t.a===ME.name)return rr().submitTask(t.id);
+if(ns==="done")return act(t,"approveTask",true,"");
+if(ns==="review"&&t.a===ME.name)return act(t,"submitTask");
 if(t.s==="review"&&ap&&ns!=="done")return openD(t.id)
-t.s=ns;save(t);render()}
+const sn=Object.assign({},t);t.s=ns;save(t,sn);render()}
 function actR(t){const A=$("#act"),g=i=>document.getElementById(i);A.innerHTML="";if(!t)return;const ap=canAp(t);
 if(t.a===ME.name&&(t.s==="todo"||t.s==="doing"))A.innerHTML='<button class="btn pr" id="a_sub" type="button" style="width:100%">✅ Tôi đã hoàn thành – gửi người giao duyệt</button>';
 else if(t.s==="review"&&ap)A.innerHTML='<div class="m" style="margin-bottom:4px">'+esc(t.a)+' báo đã hoàn thành. Bạn là người giao việc nên cần duyệt:</div><input id="a_n" placeholder="Ghi chú (bắt buộc nếu trả lại)"><div style="display:flex;gap:8px;margin-top:6px"><button class="btn pr" id="a_ok" type="button">✔ Duyệt hoàn thành</button><button class="btn" id="a_no" type="button">↩ Trả lại</button></div>';
 else if(t.s==="review")A.innerHTML='<div class="m">⏳ Đang chờ '+esc(t.byName||t.by)+' duyệt (chỉ người giao việc mới duyệt được).</div>';
 const go=()=>GAS.run.withSuccessHandler(()=>{$("#dlg").close();boot()}).withFailureHandler(e=>toast(e.message||e));
-if(g("a_sub"))g("a_sub").onclick=()=>go().submitTask(t.id);
-if(g("a_ok"))g("a_ok").onclick=()=>go().approveTask(t.id,true,g("a_n").value);
-if(g("a_no"))g("a_no").onclick=()=>{if(!g("a_n").value.trim())return toast("Vui lòng ghi lý do trả lại.");go().approveTask(t.id,false,g("a_n").value)}}
+if(g("a_sub"))g("a_sub").onclick=()=>act(t,"submitTask");
+if(g("a_ok"))g("a_ok").onclick=()=>act(t,"approveTask",true,g("a_n").value);
+if(g("a_no"))g("a_no").onclick=()=>{if(!g("a_n").value.trim())return toast("Vui lòng ghi lý do trả lại.");act(t,"approveTask",false,g("a_n").value)}}
 function bindDnD(){document.querySelectorAll(".t").forEach(el=>el.ondragstart=e=>e.dataTransfer.setData("id",el.dataset.id));
 document.querySelectorAll(".col").forEach(c=>{c.ondragover=e=>{e.preventDefault();c.classList.add("over")};c.ondragleave=()=>c.classList.remove("over");
 c.ondrop=e=>{e.preventDefault();const t=S.find(x=>x.id==e.dataTransfer.getData("id"));if(t)moveTo(t,c.dataset.s)}})}
@@ -186,9 +202,9 @@ function subR(){$("#sub_l").innerHTML=SUB.map((x,i)=>`<div><label style="display
 document.querySelectorAll("#sub_l input").forEach(c=>c.onchange=()=>{SUB[+c.dataset.i].d=c.checked;$("#f_pg").value=Math.round(SUB.filter(z=>z.d).length*100/SUB.length);subR()})}
 function cmR(t){$("#cm_l").innerHTML=J(t&&t.cmt).map(c=>`<div style="margin:3px 0"><b style="color:var(--tx)">${esc(c.u)}</b> · ${String(c.t).slice(5,16).replace("T"," ")}<br><span style="color:var(--tx)">${esc(c.x)}</span></div>`).join("")||"Chưa có bình luận"}
 $("#sub_a").onclick=()=>{const v=$("#sub_i").value.trim();if(v){SUB.push({x:v,d:false});$("#sub_i").value="";subR()}};
-$("#cm_a").onclick=()=>{const x=$("#cm_i").value.trim();if(!x||!editId)return;GAS.run.withSuccessHandler(()=>{$("#cm_i").value="";GAS.run.withSuccessHandler(d=>{S=d.tasks;cmR(S.find(z=>z.id===editId));render()}).bootstrap()}).withFailureHandler(e=>toast(e.message||e)).addComment(editId,x)};
-$("#csvc").onclick=()=>{$("#csvt").select();document.execCommand("copy")};$("#csvx").onclick=()=>$("#csvd").close();
-function exportCSV(){const c=v=>String(v==null?"":v).replace(/[\t\r\n]+/g," ");
+$("#cm_a").onclick=()=>{const x=$("#cm_i").value.trim();if(!x||!editId)return;GAS.run.withSuccessHandler(r=>{$("#cm_i").value="";const z=S.find(z=>z.id===editId);if(z){z.cmt=r;cmR(z);render()}}).withFailureHandler(e=>toast(e.message||e)).addComment(editId,x)};
+$("#csvc").onclick=()=>{$("#csvt").select();(navigator.clipboard?navigator.clipboard.writeText($("#csvt").value):Promise.reject()).catch(()=>document.execCommand("copy")).finally(()=>toast("Đã sao chép."))};$("#csvx").onclick=()=>$("#csvd").close();
+function exportCSV(){const c=v=>{v=String(v==null?"":v).replace(/[\t\r\n]+/g," ");return /^[=+\-@]/.test(v)?"'"+v:v};
 const R=[["Công việc","Phòng ban","Người làm","Ưu tiên","Hạn","Tiến độ %","Trạng thái"],...filt().map(t=>[t.t,t.dep,t.a,PR[t.p],t.due,t.pg,ST.find(z=>z[0]===t.s)[1]])];
 $("#csvt").value=R.map(x=>x.map(c).join("\t")).join("\n");$("#csvd").showModal()}
 fill($("#fd"),DEP,"Tất cả phòng ban");
@@ -198,9 +214,9 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{V=b.dataset.v;
 ["#q","#fd","#fa","#so"].forEach(s=>$(s).oninput=render);
 $("#add").onclick=()=>openD(null);$("#cx").onclick=()=>$("#dlg").close();
 $("#ok").onclick=()=>{const t=editId?S.find(x=>x.id===editId):{id:Math.max(0,...S.map(x=>x.id))+1};
-if(!$("#f_t").value.trim())return;
+if(!$("#f_t").value.trim())return toast("Vui lòng nhập tiêu đề.");const sn=editId?Object.assign({},t):null;
 Object.assign(t,{t:$("#f_t").value.trim(),d:$("#f_d").value,dep:$("#f_dep").value,a:$("#f_a").value,p:$("#f_p").value,due:$("#f_due").value,s:$("#f_s").value,sub:JSON.stringify(SUB),pg:Math.min(100,Math.max(0,+$("#f_pg").value||0))});
-if(t.s==="done")t.pg=100;if(!editId)t.id=0;save(t);$("#dlg").close()};
+if(t.s==="done")t.pg=100;if(!editId)t.id=0;save(t,sn);render();$("#dlg").close()};
 $("#del").onclick=()=>{const b=$("#del");if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Bấm lần nữa để xóa";return}GAS.run.withSuccessHandler(boot).withFailureHandler(e=>toast(e.message||e)).deleteTask(editId);$("#dlg").close()};
 // ===== Giao diện cao cấp: icon, thông báo, lời chào, offline =====
 const ic={u:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',c:'<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',m:'<svg class="ic" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"/></svg>'};
@@ -212,17 +228,18 @@ addEventListener("offline",()=>toast("Mất kết nối mạng. Dữ liệu sẽ
 addEventListener("online",()=>toast("Đã kết nối lại."));
 
 // ===== Hiện lỗi thay vì đứng im =====
-function showErr(m){if(S!==null)return;$("#app").innerHTML='<div class="panel late"><b>Không tải được dữ liệu</b><br>'+esc(m)+'<br><button class="btn" id="rt" style="margin-top:10px">Tải lại</button></div>';$("#rt").onclick=()=>location.reload()}
+const ERRS=[];function showErr(m){if(S)return;m=String(m);if(!ERRS.includes(m))ERRS.push(m);$("#app").innerHTML='<div class="panel late"><b>Không tải được dữ liệu</b><br>'+ERRS.map(x=>esc(x)).join("<br>")+'<br><button class="btn" id="rt" style="margin-top:10px">Tải lại</button></div>';$("#rt").onclick=()=>location.reload()}
 addEventListener("error",e=>showErr(e.message));addEventListener("unhandledrejection",e=>showErr((e.reason&&e.reason.message)||e.reason));
 // ===== Kết nối API + đăng nhập Google (thay cho google.script.run) =====
 let TOKEN=sessionStorage.getItem("tk")||"",loginRes=null;
 const tokExp=()=>{try{return JSON.parse(atob(TOKEN.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).exp}catch(e){return 1e12}};
-function api(fn,args,retry){if(TOKEN&&tokExp()<Date.now()/1e3+30)return login().then(()=>api(fn,args,retry));document.body.classList.add("busy");
+function api(fn,args,retry){if(TOKEN&&tokExp()<Date.now()/1e3+30)return login().then(()=>api(fn,args,retry));NB++;document.body.classList.add("busy");
+const st=$("#st");if(st){st.textContent="Đang gọi máy chủ…";setTimeout(()=>{const s=$("#st");if(s)s.textContent="Máy chủ phản hồi chậm (lần đầu có thể mất 10–20 giây). Vui lòng chờ…"},8000)}
 const ac=new AbortController(),tm=setTimeout(()=>ac.abort(),45000);
-return fetch(CFG.API,{signal:ac.signal,method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.json()).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).catch(e=>{throw e.name==="AbortError"?new Error("Máy chủ phản hồi quá lâu. Hãy bấm Tải lại."):e}).finally(()=>{clearTimeout(tm);document.body.classList.remove("busy")})}
+return fetch(CFG.API,{signal:ac.signal,method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({token:TOKEN,fn,args})}).then(r=>r.text()).then(t=>{try{return JSON.parse(t)}catch(e){throw new Error("Máy chủ trả về trang không phải dữ liệu (thường do chưa cấp quyền hoặc chưa triển khai phiên bản mới của Code.gs).")}}).then(j=>{if(j.ok)return j.data;if(j.error==="AUTH"&&!retry)return login().then(()=>api(fn,args,1));throw new Error(j.error==="AUTH"?"Phiên đăng nhập không hợp lệ":j.error)}).catch(e=>{throw e.name==="AbortError"?new Error("Máy chủ phản hồi quá lâu. Hãy bấm Tải lại."):e}).finally(()=>{clearTimeout(tm);if(--NB<=0){NB=0;document.body.classList.remove("busy")}})}
 function mk(ok,ko){return new Proxy({},{get:(_,k)=>k==="withSuccessHandler"?f=>mk(f,ko):k==="withFailureHandler"?f=>mk(ok,f):(...a)=>{api(k,a).then(v=>{try{ok(v)}catch(e){ko(e)}},ko)}})}
 const GAS={get run(){return mk(()=>{},e=>toast(e.message||e))}};
-let loginP=null;function login(){if(loginP)return loginP;TOKEN="";sessionStorage.removeItem("tk");$("#lg").style.display="flex";if(window.google&&google.accounts)try{google.accounts.id.prompt()}catch(e){}return loginP=new Promise(r=>loginRes=()=>{loginP=null;r()})}
+let loginP=null;function login(){if(loginP)return loginP;TOKEN="";sessionStorage.removeItem("tk");$("#lg").style.display="flex";$("#lg .m").textContent="Phiên đăng nhập đã hết hạn hoặc chưa đăng nhập. Vui lòng đăng nhập bằng Gmail được cấp quyền.";if(window.google&&google.accounts)try{google.accounts.id.prompt()}catch(e){}return loginP=new Promise(r=>loginRes=()=>{loginP=null;r()})}
 function gisInit(){google.accounts.id.initialize({client_id:CFG.CLIENT_ID,auto_select:true,callback:x=>{TOKEN=x.credential;sessionStorage.setItem("tk",TOKEN);$("#lg").style.display="none";if(loginRes){const r=loginRes;loginRes=null;r()}else boot()}});google.accounts.id.renderButton($("#gbtn"),{theme:"outline",size:"large"})}
 $("#out").onclick=()=>{sessionStorage.removeItem("tk");if(window.google&&google.accounts)google.accounts.id.disableAutoSelect();location.reload()};
 let lastRf=Date.now();const rf=()=>{if(TOKEN&&!document.hidden&&V!=="users"&&!$("#dlg").open&&!$("#csvd").open&&Date.now()-lastRf>9e4){lastRf=Date.now();boot()}};
